@@ -1,68 +1,11 @@
-from dataclasses import dataclass
+from derivatives import AmericanOption, InterestRateSwap
 import numpy as np
-from scipy.stats import norm
 from itertools import groupby
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Union
 sns.set()
-
-
-def gbm(r0=0.05, sigma=0.2, mu=0.01, T=1.0, steps=5, paths=2):
-    dt = T / steps
-    Z = np.random.normal(size=(steps, paths))
-    X = (mu - sigma ** 2 / 2) * dt + Z * sigma * np.sqrt(dt)
-    X[0, :] = 0.0
-    return r0 * np.exp(X.cumsum(axis=0))
-
-
-@dataclass
-class AmericanOption:
-    early_exercisable = True
-    strike: float
-    expiry: float
-    option_type: str
-
-    def intrinsic_value(self, underlying_sim: np.array, t: int):
-        ST = underlying_sim[:, t]
-        mult = 1.0 if self.option_type.lower() == "call" else -1.0
-        return np.maximum(mult * (ST - self.strike), 0)
-
-    def cashflow(self, underlying_sim: np.array, t: int):
-        return underlying_sim[:, t]*0.0
-
-
-@dataclass
-class InterestRateSwap:
-    early_exercisable = False
-    fixed_rate: float
-    expiry: float
-    payment_freq_pa: float
-    position: str
-    notional: float
-
-    def intrinsic_value(self, underlying_sim: np.array, t: int):
-        if t == -1:
-            iv = self.cashflow(underlying_sim, t)
-        else:
-            iv = underlying_sim[:, t]*np.nan
-        return iv
-
-    def cashflow(self, underlying_sim: np.array, t: int):
-
-        n_max = underlying_sim.shape[1]
-        if -t == n_max:
-            bpayment = 0.0
-        elif (- t - 1) % int((underlying_sim.shape[1] - 1) / self.expiry / self.payment_freq_pa) == 0:
-            bpayment = 1.0
-        else:
-            bpayment = 0.0
-
-        rt = underlying_sim[:, t]
-        mult = 1.0 if self.position.lower() == "receiver" else -1.0
-        cf = self.notional * mult * (rt - self.fixed_rate) / self.payment_freq_pa
-        return cf*bpayment
 
 
 def boundary(sequence: np.array):
@@ -84,8 +27,9 @@ def boundary(sequence: np.array):
     return k_star
 
 
-def sort(sequence_to_sort_by, *args):
-    order = np.argsort(sequence_to_sort_by)
+def sort(sequence_to_sort_by, reversed, *args, **kwargs):
+    mult = -1.0 if reversed else 1.0
+    order = np.argsort(mult*sequence_to_sort_by)
     ordered_args = (arg[order, :] for arg in args)
     return ordered_args
 
@@ -127,7 +71,16 @@ def tilley_step(I, H, V, x, y, Q, P, rf_sim, epoch, derivative: Union[AmericanOp
     """
 
     # 1 - reorder by stock price
-    rf_sim, V, I, H, x, y = sort(rf_sim[:, epoch], rf_sim, V, I, H, x, y)
+    if type(derivative).__name__ == "AmericanOption":
+        if derivative.option_type == "put":
+            reverse = True
+        else:
+            reverse = False
+    else:
+        reverse = False
+
+    rf_sim, V, I, H, x, y = sort(rf_sim[:, epoch], reverse,
+                                 rf_sim, V, I, H, x, y)
 
     # 2 - compute I[k, t]
     I[:, epoch] = derivative.intrinsic_value(underlying_sim=rf_sim, t=epoch)
@@ -188,66 +141,15 @@ def tilley_price(rfr, time_steps, Q, P, derivative, rf_sim):
 
     z = (y.cumsum(axis=1).cumsum(axis=1) == 1.0).astype(int)
     D = (np.exp(rfr*dt)*np.ones_like(I)).cumprod(axis=1)/np.exp(rfr*dt)
-    price = (z/D*I).sum()/paths if derivative.early_exercisable else (z/D*V).sum()/paths
+    price = (z[:, 1:]/D[:, 1:]*I[:, 1:]).sum()/paths if derivative.early_exercisable else (z/D*V).sum()/paths
+    V[:, 0] = price
 
-    early_exercise_prices = z*rf_sim
-    early_exercise_prices[early_exercise_prices == 0.0] = np.inf
-    early_exercise_boundary = np.nanmin(early_exercise_prices, axis=0)
+    early_exercise_prices = y*rf_sim*(I > H)
+    early_exercise_prices[early_exercise_prices == 0.0] = -np.inf
+    early_exercise_boundary = np.nanmax(early_exercise_prices, axis=0)
     early_exercise_boundary[np.isinf(early_exercise_boundary)] = np.nan
     return price, V, early_exercise_boundary
 
 
 if __name__ == "__main__":
-
-    rfr = 0.05
-    sigma = 0.1
-    r0 = 0.05
-    K = 0.06
-    T = 5.0
-
-    P = 500
-    Q = 100
-    time_steps = 81
-
-    rf_sim = gbm(r0=r0, sigma=sigma, mu=rfr, steps=time_steps, paths=Q*P).T
-
-    # derivative = AmericanOption(strike=K, expiry=T, option_type="call")
-    derivative = InterestRateSwap(notional=1_000_000, fixed_rate=0.05, expiry=T, position='receiver',
-                                  payment_freq_pa=2.0)
-    price_option, V_option, ex_bound = tilley_price(derivative=derivative,
-                                                    time_steps=time_steps, P=P, Q=Q, rf_sim=rf_sim, rfr=rfr)
-
-    quantiles_to_plot = [0.75, 0.25]
-    quantiles_option = pd.DataFrame(np.quantile(V_option, quantiles_to_plot, axis=0).T,
-                                    columns=[str(q) for q in quantiles_to_plot],
-                                    index=np.linspace(0, T, time_steps))
-    quantiles_option['EPE'] = np.maximum(V_option, 0).mean(axis=0).T
-    fig, ax = plt.subplots(2, 1)
-    quantiles_option.drop('EPE', axis=1).plot(ax=ax[0])
-    quantiles_option['EPE'].plot(ax=ax[0], linestyle="--", legend=True)
-    ax[0].set_title(str(derivative))
-
-    eeb = pd.DataFrame(ex_bound, index=quantiles_option.index,
-                       columns=['Early Exercise Boundary']).replace(0.0, np.nan)
-    eeb = eeb[np.abs(eeb.diff()) < 10].dropna()
-    ax[1].plot(quantiles_option.index, rf_sim[np.random.choice(range(rf_sim.shape[0]), 300), :].T,
-               color='grey', alpha=0.2)
-    eeb.plot(ax=ax[1])
-
-    plt.show()
-
-    if type(derivative).__name__ == "InterestRateSwap":
-        cf_ind = (rf_sim.shape[1] - 1)/derivative.expiry/derivative.payment_freq_pa
-        cf_ind = [x for x in range(1, time_steps) if x % cf_ind == 0]
-        d_fct = np.array([np.exp(-rfr*x/(time_steps-1)*derivative.expiry) for x in cf_ind])
-        control_price = np.concatenate([
-            (derivative.notional*(rf_sim[:, epoch] - derivative.fixed_rate)/derivative.payment_freq_pa).reshape(-1, 1)
-            for epoch in cf_ind], axis=1)
-        control_price = (control_price*d_fct).sum(axis=1).mean()
-    else:
-        d1 = (np.log(r0/K) + (rfr - sigma**2/2)*T)/(sigma*np.sqrt(T))
-        d2 = d1 - sigma*np.sqrt(T)
-        control_price = norm.cdf(d1)*r0 - norm.cdf(d2)*K*np.exp(-rfr*T)
-
-    print(f'Tilley price: {price_option:.8f}\n'
-          f'Control price: {control_price:.8f}')
+    pass
