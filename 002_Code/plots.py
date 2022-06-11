@@ -128,22 +128,3 @@ if __name__ == "__main__":
     plot_tilley_early_exercise()
     plot_tilley_exposures()
     plot_tilley_alpha_dependency()
-
-    # if type(derivative).__name__ == "InterestRateSwap":
-    #     cf_ind = (rf_sim.shape[1] - 1) / derivative.expiry / derivative.payment_freq_pa
-    #     cf_ind = [x for x in range(1, time_steps) if x % cf_ind == 0]
-    #     d_fct = np.array([np.exp(-rfr * x / (time_steps - 1) * derivative.expiry) for x in cf_ind])
-    #     control_price = np.concatenate([
-    #         (derivative.notional * (rf_sim[:, epoch] - derivative.fixed_rate) / derivative.payment_freq_pa).reshape(-1,
-    #                                                                                                                 1)
-    #         for epoch in cf_ind], axis=1)
-    #     control_price = (control_price * d_fct).sum(axis=1).mean()
-    # else:
-    #     d1 = (np.log(r0 / derivative.strike) + (rfr - sigma ** 2 / 2) * T) / (sigma * np.sqrt(T))
-    #     d2 = d1 - sigma * np.sqrt(T)
-    #     if derivative.option_type == "call":
-    #         control_price = norm.cdf(d1) * r0 - norm.cdf(d2) * derivative.strike * np.exp(-rfr * T)
-    #     else:
-    #         control_price = norm.cdf(-d2) * derivative.strike * np.exp(-rfr * T) - norm.cdf(-d1) * r0
-    # print(f'Tilley price: {price_option:.8f}\n'
-    #       f'Control price: {control_price:.8f}')
