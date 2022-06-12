@@ -7,12 +7,15 @@ Project for the Implemention of Financial Models course.
 
 ### Project description
 
-The project compares two algorithms of numerical pricing - Tsitsiklis-Van Roy and Tilley.
-Results are presented for a portfolio comprising of an american IR option and an interest rate swap. We present the EPE together with lower and upper quantiles for the exposure distribution.
+The project compares two algorithms of numerical pricing for american derivatives - Tsitsiklis-Van Roy and Tilley.
+Results are presented for an american IR put option and an interest rate swap. We present the EPE together with lower and upper quantiles for the exposure distribution.
 
 ### TOC
 
-[TO BE DONE]
+1. Tilley and Tsitsiklis-Van Roy algorithm idea
+2. Dependency on hyperparameters
+3. American Put pricing
+4. Interest Rate Swap pricing
 
 ### How to?
 
