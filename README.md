@@ -19,7 +19,7 @@ Results are presented for an american IR put option and an interest rate swap. W
 
 ### How to?
 
-* Please refer to 004_Presentation for the main findings
+* Please refer to 005_Presentation for the main findings
 * Please refer to 003_Code for code used to generate the results
 
 ### Authors:
