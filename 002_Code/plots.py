@@ -18,7 +18,7 @@ plt.rcParams.update({'figure.figsize': (8, 4),
                      'axes.spines.right': False,
                      'xtick.top': False,
                      'ytick.right': False})
-sns.set_context('notebook')
+sns.set_context('talk')
 
 
 def plot_interest_rate_distribution():
@@ -36,11 +36,13 @@ def plot_interest_rate_distribution():
     df_quantiles = pd.DataFrame(np.quantile(rf_sim, qs, axis=0).T,
                                 columns=['$q_{' + f'{q:.3f}' + "}$" for q in qs],
                                 index=np.linspace(0, T, rf_sim.shape[1]))
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(8, 6))
     ax.plot(df_quantiles.index, rf_sim.T, color='grey', alpha=0.4)
     df_quantiles.plot(ax=ax, colormap='jet')
-    fig.savefig(f"003_Outputs/InterestRate.pdf")
-    plt.show()
+    ax.set_ylabel('$r_t$')
+    ax.set_xlabel('$t$')
+
+    fig.savefig(f"003_Outputs/InterestRate.png")
     plt.close(fig)
 
 
@@ -70,7 +72,7 @@ def plot_exposures():
                                                              rf_sim=rf_sim,
                                                              rfr=rfr, time_steps=time_steps)
 
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(8, 6))
         quantiles = [0.025, 0.1, 0.5, 0.9, 0.975]
         for V_estimate, name, line in zip([V_tilley, V_tsitsiklis], ['Tilley', 'Tsitsiklis'], ['-', '--']):
             df_quantiles = pd.DataFrame(np.quantile(V_estimate, quantiles, axis=0).T,
@@ -78,11 +80,14 @@ def plot_exposures():
                                         index=np.linspace(0, T, V_estimate.shape[1]))
 
             df_quantiles.plot(ax=ax, linestyle=line, colormap='jet')
-            #df_quantiles['EPE'] = np.maximum(V_estimate, 0).mean(axis=0).T
-            #df_quantiles['EPE'].plot(ax=ax, legend=True)
+        ax.set_ylabel('$V_t$')
+        ax.set_xlabel('$t$')
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
 
-        plt.show()
-        fig.savefig(f"003_Outputs/Exposures_{type(derivative).__name__}.pdf")
+        # Put a legend to the right of the current axis
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        fig.savefig(f"003_Outputs/Exposures_{type(derivative).__name__}.png")
         plt.close(fig)
 
 
@@ -91,19 +96,17 @@ def plot_epe():
     sigma = 0.2
     r0 = 0.01
     T = 5.0
-
     paths = 10000
-    time_steps = 21
-
-    rf_sim = gbm(r0=r0, sigma=sigma, mu=rfr, steps=time_steps, paths=paths).T
 
     derivatives = [AmericanOption(notional=1_000, strike=0.01, expiry=T, option_type="put"),
                    InterestRateSwap(notional=1_000, fixed_rate=0.010501, expiry=T, position='receiver',
                                     payment_freq_pa=4.0)]
 
-    for derivative, alpha in zip(derivatives, [0.5, 0.65]):
+    for derivative, alpha, time_steps in zip(derivatives, [0.5, 0.65], [11, 21]):
         P = int(paths**alpha)
         Q = int(paths/P)
+
+        rf_sim = gbm(r0=r0, sigma=sigma, mu=rfr, steps=time_steps, paths=paths).T
 
         price_tilley, V_tilley, _ = tilley_price(derivative=derivative,
                                                  time_steps=time_steps, P=P, Q=Q,
@@ -111,7 +114,7 @@ def plot_epe():
         price_tsitsiklis, V_tsitsiklis, _ = tsitsiklis_price(derivative=derivative,
                                                              rf_sim=rf_sim,
                                                              rfr=rfr, time_steps=time_steps)
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(8, 6))
         quantiles = [0.025, 0.1, 0.5, 0.9, 0.975]
         for V_estimate, name, line in zip([V_tilley, V_tsitsiklis], ['Tilley', 'Tsitsiklis'], ['-', '--']):
             df_quantiles = pd.DataFrame(np.quantile(V_estimate, quantiles, axis=0).T,
@@ -120,9 +123,9 @@ def plot_epe():
 
             df_quantiles[f'{name} EPE'] = np.maximum(V_estimate, 0).mean(axis=0).T
             df_quantiles[f'{name} EPE'].plot(ax=ax, legend=True, linestyle=line)
-
-        plt.show()
-        fig.savefig(f"003_Outputs/EPEs_{type(derivative).__name__}.pdf")
+        ax.set_ylabel('$EPE_t$')
+        ax.set_xlabel('$t$')
+        fig.savefig(f"003_Outputs/EPEs_{type(derivative).__name__}.png")
         plt.close(fig)
 
 
@@ -132,39 +135,32 @@ def plot_early_exercise():
     r0 = 0.01
     T = 5.0
 
-    paths = 5000
+    paths = 100_000
     time_steps = 51
 
     rf_sim = gbm(r0=r0, sigma=sigma, mu=rfr, steps=time_steps, paths=paths).T
 
     derivative = AmericanOption(notional=1_000, strike=0.01, expiry=T, option_type="put")
-    alpha = 0.5
+    alpha = 0.6
     P = int(paths ** alpha)
     Q = int(paths / P)
 
     _, V_tilley, eeb_tilley = tilley_price(derivative=derivative,
                                            time_steps=time_steps, P=P, Q=Q,
                                            rf_sim=rf_sim[:P * Q, :], rfr=rfr)
-    _, V_tsitsiklis, eeb_tsitsiklis = tsitsiklis_price(derivative=derivative,
-                                                       rf_sim=rf_sim,
-                                                       rfr=rfr, time_steps=time_steps)
 
-    fig, ax = plt.subplots()
-    ax.plot(np.linspace(0, T, V_tsitsiklis.shape[1]),
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.plot(np.linspace(0, T, V_tilley.shape[1]),
             rf_sim[np.random.choice(range(rf_sim.shape[0]), 1000), :].T,
             color='grey', alpha=0.2)
     ax.set_ylabel('$r_t$')
     ax.set_xlabel('$t$')
 
-    for V_estimate, eeb_estimate, name in zip([V_tilley, V_tsitsiklis],
-                                              [eeb_tilley, eeb_tsitsiklis],
-                                              ['Tilley', 'Tsitsiklis']):
-        eeb_estimate[eeb_estimate > rf_sim.mean(axis=0)] = np.nan
-        eeb = pd.DataFrame(eeb_estimate, index=np.linspace(0, T, V_estimate.shape[1]),
-                           columns=[f'{name} Early Exercise Boundary']).replace(0.0, np.nan)
-        eeb.plot(ax=ax)
-    plt.show()
-    fig.savefig(f"003_Outputs/EarlyExerciseBoundaries_AmericanOption.pdf")
+    eeb_tilley[eeb_tilley > rf_sim.mean(axis=0)] = np.nan
+    eeb = pd.DataFrame(eeb_tilley, index=np.linspace(0, T, V_tilley.shape[1]),
+                       columns=['Tilley Early Exercise Boundary']).replace(0.0, np.nan)
+    eeb.plot(ax=ax)
+    fig.savefig(f"003_Outputs/EarlyExerciseBoundaries_AmericanOption.png")
     plt.close(fig)
 
 
@@ -174,7 +170,7 @@ def plot_tilley_alpha_dependency():
     r0 = 0.01
     T = 5.0
 
-    paths = 50000
+    paths = 100000
     time_steps = 21
 
     rf_sim = gbm(r0=r0, sigma=sigma, mu=rfr, steps=time_steps, paths=paths).T
@@ -199,10 +195,11 @@ def plot_tilley_alpha_dependency():
             epes[f"$\\alpha = {a:.4f}$"] = np.maximum(V_option, 0).mean(axis=0).T
         df_epes = pd.DataFrame.from_dict(epes)
 
-        fig, ax = plt.subplots(figsize=(8, 4))
+        fig, ax = plt.subplots(figsize=(8, 6))
         df_epes.plot(linestyle="--", ax=ax)
-        plt.show()
-        fig.savefig(f"003_Outputs/Tilley_alpha_{type(derivative).__name__}.pdf")
+        ax.set_ylabel("$EPE_t$")
+        ax.set_xlabel("$t$")
+        fig.savefig(f"003_Outputs/Tilley_alpha_{type(derivative).__name__}.png")
         plt.close(fig)
 
 
@@ -244,34 +241,34 @@ def plot_tsitsiklis_regressions():
                         ('poly', PolynomialFeatures(4)),
                         ('regressor', LinearRegression())]),
               Pipeline([('scaler', StandardScaler()),
-                        ('poly', PolynomialFeatures(4)),
+                        ('poly', PolynomialFeatures(6)),
                         ('regressor', LassoCV())]),
               Pipeline([('scaler', StandardScaler()),
                         ('poly', PolynomialFeatures(2)),
                         ('regressor', PiecewiseRegressor(verbose=True,
                                                          binner=KBinsDiscretizer(n_bins=2)))])]
     # Value of continuation
-    fig, ax = plt.subplots(2, 3, figsize=(8, 6))
+    fig, ax = plt.subplots(2, 3, figsize=(12, 9))
     names = ['LinReg ord.1', 'LinReg ord.2', 'LinReg ord.3', 'LinReg ord.4',
-             'Lasso ord.4', '2-piece LinReg ord.2']
+             'Lasso ord.6', '2-piece LinReg ord.2']
     for axis, model, name in zip(ax.ravel(), models, names):
         model.fit(X=X, y=Y)
-        axis.scatter(X, Y, marker='+')
+        axis.scatter(X, Y, marker='+', s=0.95)
         axis.plot(sorted(X), model.predict(sorted(X)).ravel(), color='crimson')
         axis.set_title(name)
+        axis.set_xlabel('$r_t$')
+        axis.set_ylabel('$V_{t+1}$')
 
     plt.tight_layout()
-    plt.show()
-    fig.savefig("003_Outputs/Regressions_Tsitsiklis.pdf")
+    fig.savefig("003_Outputs/Regressions_Tsitsiklis.png")
     plt.close(fig)
 
 
 if __name__ == "__main__":
 
-    # plot_exposures()
+    plot_exposures()
     plot_epe()
-
-    #plot_interest_rate_distribution()
-    #plot_early_exercise()
-    #plot_tilley_alpha_dependency()
-    #plot_tsitsiklis_regressions()
+    plot_interest_rate_distribution()
+    plot_early_exercise()
+    plot_tilley_alpha_dependency()
+    plot_tsitsiklis_regressions()
