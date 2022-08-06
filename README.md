@@ -1,6 +1,6 @@
 # American Monte Carlo
 
-<img src="https://www.york.ac.uk/media/study/courses/postgraduate/mathematics/optimised%20image%205.jpg" alt="Financial chart"/>  
+<img src="https://github.com/PiotMik/american_monte_carlo/blob/main/003_Outputs/Exposures_InterestRateSwap.png" alt="Expected Positive Exposures"/>  
 
 Project for the Implemention of Financial Models course.
 ---
